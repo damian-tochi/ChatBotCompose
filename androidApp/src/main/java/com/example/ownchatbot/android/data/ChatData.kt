@@ -12,7 +12,7 @@ import java.util.Locale
 
 object ChatData {
 
-    val api_key = "AIzaSyAsH8bd5wMqnWwXeeqixzLmw7vvOe_LTco"
+    val api_key = ""
 
     suspend fun getResponse(prompt: String): Chat {
         val generativeModel = GenerativeModel(
