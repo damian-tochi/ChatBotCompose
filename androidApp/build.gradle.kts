@@ -58,4 +58,10 @@ dependencies {
     implementation (libs.accompanist.systemuicontroller)
     implementation (libs.androidx.datastore.preferences)
     implementation (libs.converter.gson)
+
+    val composeBom = platform("androidx.compose:compose-bom:2024.04.01")
+    implementation(composeBom)
+
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation("androidx.compose.ui:ui-tooling-preview")
 }

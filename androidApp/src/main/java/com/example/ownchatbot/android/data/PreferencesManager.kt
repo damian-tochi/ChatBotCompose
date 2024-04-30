@@ -12,7 +12,6 @@ import java.io.StringReader
 
 class PreferencesManager(context: Context) {
 
-    lateinit var chatStateFlow: MutableStateFlow<ChatState>
 
     private val sharedPreferences: SharedPreferences =
         context.getSharedPreferences("HistPref", Context.MODE_PRIVATE)
@@ -36,17 +35,15 @@ class PreferencesManager(context: Context) {
         sharedPreferences.edit().putString("chat_hist", chatState).apply()
     }
 
-    fun getChatState(): MutableStateFlow<ChatState> {
-        val defaultValue = ChatState()
-        val chatStateString = sharedPreferences.getString("chat_hist", defaultValue.toString())
-        return MutableStateFlow(ChatState.fromString(chatStateString))
-    }
-
-    fun getChatStateFlow(): MutableStateFlow<ChatState> {
+    fun getChatStateFlow(): MutableStateFlow<ChatState>? {
+        var retVal: MutableStateFlow<ChatState>? = null
         val chatStateString = sharedPreferences.getString("chat_hist", "")
         val reader = JsonReader(StringReader(chatStateString) as Reader?)
         reader.isLenient = true
-        return Gson().fromJson(reader, object : TypeToken<MutableStateFlow<ChatState>>() {}.type)
+        try {
+            retVal = Gson().fromJson(reader, object : TypeToken<MutableStateFlow<ChatState>>() {}.type)
+        } catch (_: Exception) { }
+        return retVal
     }
 
     fun clearSession(context: Context) {

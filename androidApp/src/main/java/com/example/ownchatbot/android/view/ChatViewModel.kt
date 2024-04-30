@@ -86,4 +86,13 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    fun clear() = viewModelScope.launch {
+        val emptyChatList: MutableList<Chat> = mutableListOf()
+        _chatState.update {
+            it.copy(
+                chatList = emptyChatList
+            )
+        }
+    }
+
 }
