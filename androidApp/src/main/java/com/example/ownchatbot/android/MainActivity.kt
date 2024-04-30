@@ -12,6 +12,14 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.EaseInBounce
+import androidx.compose.animation.core.EaseInCirc
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -44,12 +52,17 @@ import androidx.compose.runtime.State
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -72,8 +85,10 @@ import coil.request.ImageRequest
 import coil.size.Size
 import com.example.ownchatbot.android.data.PreferencesManager
 import com.example.ownchatbot.android.ui.DarkESTMaritineBlue
+import com.example.ownchatbot.android.ui.DarkMaritineBlue
 import com.example.ownchatbot.android.ui.GeminiChatBotTheme
 import com.example.ownchatbot.android.ui.LightNavy
+import com.example.ownchatbot.android.ui.LightNavyTF
 import com.example.ownchatbot.android.ui.MaritineBlue
 import com.example.ownchatbot.android.ui.NormalMaritineBlue
 import com.example.ownchatbot.android.ui.Purple40
@@ -101,9 +116,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-    private  var  textToSpeech:TextToSpeech? = null
+    private var textToSpeech: TextToSpeech? = null
     private val _state = mutableStateOf(TextToSpeechState())
     private val state: State<TextToSpeechState> = _state
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -113,10 +129,11 @@ class MainActivity : ComponentActivity() {
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = DarkESTMaritineBlue) {
+                    color = DarkESTMaritineBlue
+                ) {
                     Scaffold(modifier = Modifier.background(DarkESTMaritineBlue), topBar = {
-                            AppBar(chaViewModel)
-                        }) {
+                        AppBar(chaViewModel)
+                    }) {
                         ChatScreen(paddingValues = it, chaViewModel)
                     }
 
@@ -129,170 +146,185 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun ChatScreen(paddingValues: PaddingValues, chatViewModel: ChatViewModel) {
 
+        val transition = rememberInfiniteTransition(label = "")
+        val animatedProgress by transition.animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(20500, easing = EaseInCirc),
+                repeatMode = RepeatMode.Reverse
+            ), label = ""
+        )
+
+        val brush = Brush.linearGradient(
+            colors = listOf(DarkMaritineBlue, DarkESTMaritineBlue),
+            start = Offset(0f, Float.POSITIVE_INFINITY),
+            end = Offset(Float.POSITIVE_INFINITY, 500f * animatedProgress)
+        )
+
         val chatState = chatViewModel.chatState.collectAsState().value
+        val bitmap: Bitmap? = getBitmap()
 
-        val bitmap = getBitmap()
+        Column(modifier = Modifier
+                .fillMaxSize()
+                .padding(top = paddingValues.calculateTopPadding())
+                .background(brush),
+            verticalArrangement = Arrangement.Bottom) {
 
-            Column(
+            if (chatState.chatList.size > 0) {
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
+                    reverseLayout = true) {
+                    itemsIndexed(chatState.chatList) { _, chat ->
+                        val saveDate = chat.time
+                        val compareDay = SimpleDateFormat("dd-MM-yyyy", Locale.ENGLISH)
+                        val today = compareDay.format(Date())
+                        val savedTime = compareDay.format(saveDate)
+                        val msgDateAndTime = if (TextUtils.equals(today, savedTime)) {
+                            val sdf = SimpleDateFormat("hh:mma", Locale.ENGLISH)
+                            sdf.format(saveDate)
+                        } else {
+                            val sdf = SimpleDateFormat("MMMM dd, yyyy 'hh:mma", Locale.ENGLISH)
+                            sdf.format(saveDate)
+                        }
+
+                        if (chat.isFromUser) {
+                            UserChatItem(
+                                prompt = chat.prompt,
+                                bitmap = chat.bitmap,
+                                time = msgDateAndTime
+                            )
+                        } else {
+                            ModelChatItem(
+                                response = chat.prompt,
+                                time = msgDateAndTime
+                            )
+                        }
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .align(Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Image(
+                        painterResource(R.mipmap.android_avatar),
+                        modifier = Modifier
+                            .size(115.dp)
+                            .padding(2.dp)
+                            .background(MaritineBlue, CircleShape),
+                        contentDescription = "picked image",
+                        contentScale = ContentScale.Crop,
+                    )
+                    Text(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(0.dp, 0.dp, 0.dp, 6.dp),
+                        textAlign = TextAlign.Center,
+                        text = "Powered by Gemini AI",
+                        fontSize = 10.sp,
+                        color = LightNavy
+                    )
+                    Text(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(10.dp, 10.dp, 10.dp, 0.dp),
+                        textAlign = TextAlign.Center,
+                        text = "How may i be of assistance?",
+                        fontSize = 15.sp,
+                        color = Color.White
+                    )
+
+                }
+            }
+
+            bitmap?.let {
+                Box(modifier = Modifier.padding(10.dp)) {
+                    Image(
+                        modifier = Modifier
+                            .size(70.dp)
+                            .padding(bottom = 2.dp)
+                            .clip(RoundedCornerShape(6.dp)),
+                        contentDescription = "picked image",
+                        contentScale = ContentScale.Crop,
+                        bitmap = it.asImageBitmap()
+                    )
+                }
+
+            }
+
+            Row(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = paddingValues.calculateTopPadding())
-                    .background(DarkESTMaritineBlue),
-                verticalArrangement = Arrangement.Bottom) {
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp, start = 10.dp, end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
 
-              if (chatState.chatList.size > 0) {
-                  LazyColumn(
-                      modifier = Modifier
-                          .weight(1f)
-                          .fillMaxWidth()
-                          .padding(horizontal = 8.dp),
-                      reverseLayout = true) {
-                      itemsIndexed(chatState.chatList) { index, chat ->
-                          val saveDate = chat.time
-                          val compareDay = SimpleDateFormat("dd-MM-yyyy", Locale.ENGLISH)
-                          val today = compareDay.format(Date())
-                          val savedTime = compareDay.format(saveDate)
-                          val msgDateAndTime = if (TextUtils.equals(today, savedTime)) {
-                              val sdf = SimpleDateFormat("hh:mma", Locale.ENGLISH)
-                              sdf.format(saveDate)
-                          } else {
-                              val sdf = SimpleDateFormat("MMMM dd, yyyy 'hh:mma", Locale.ENGLISH)
-                              sdf.format(saveDate)
-                          }
+                Icon(
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clickable {
+                            imagePicker.launch(
+                                PickVisualMediaRequest
+                                    .Builder()
+                                    .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    .build()
+                            )
+                        },
+                    imageVector = Icons.Rounded.AddPhotoAlternate,
+                    contentDescription = "Add Photo",
+                    tint = LightNavy
+                )
 
-                          if (chat.isFromUser) {
-                              UserChatItem(
-                                  prompt = chat.prompt,
-                                  bitmap = chat.bitmap,
-                                  time = msgDateAndTime
-                              )
-                          } else {
-                              ModelChatItem(
-                                  response = chat.prompt,
-                                  time = msgDateAndTime
-                              )
-                          }
-                      }
-                  }
-              } else {
-                  Column(modifier = Modifier
-                      .weight(1f)
-                      .fillMaxWidth()
-                      .align(Alignment.CenterHorizontally),
-                      verticalArrangement = Arrangement.Center,
-                      horizontalAlignment = Alignment.CenterHorizontally) {
-                      Image(
-                          painterResource(R.mipmap.android_avatar),
-                          modifier = Modifier
-                              .size(115.dp)
-                              .padding(7.dp)
-                              .background(MaritineBlue, CircleShape),
-                          contentDescription = "picked image",
-                          contentScale = ContentScale.Crop,
-                      )
-                      Text(modifier = Modifier
-                          .fillMaxWidth()
-                          .padding(0.dp, 0.dp, 0.dp, 0.dp),
-                          textAlign = TextAlign.Center,
-                          text = "Ovasabi",
-                          fontSize = 20.sp,
-                          fontWeight = FontWeight.Bold,
-                          color = NormalMaritineBlue,
-                      )
-                      Text(modifier = Modifier
-                          .fillMaxWidth()
-                          .padding(0.dp, 0.dp, 0.dp, 6.dp),
-                          textAlign = TextAlign.Center,
-                          text = "Powered by Gemini AI",
-                          fontSize = 10.sp,
-                          color = LightNavy
-                      )
-                      Text(modifier = Modifier
-                          .fillMaxWidth()
-                          .padding(10.dp, 10.dp, 10.dp, 0.dp),
-                          textAlign = TextAlign.Center,
-                          text = "How may i assist you today?",
-                          fontSize = 15.sp,
-                          color = Color.White
-                      )
-                  }
-              }
+                Spacer(modifier = Modifier.width(8.dp))
 
-                bitmap?.let {
-                    Box(modifier = Modifier.padding(10.dp)) {
-                        Image(
-                            modifier = Modifier
-                                .size(70.dp)
-                                .padding(bottom = 2.dp)
-                                .clip(RoundedCornerShape(6.dp)),
-                            contentDescription = "picked image",
-                            contentScale = ContentScale.Crop,
-                            bitmap = it.asImageBitmap()
+                TextField(
+                    modifier = Modifier
+                        .weight(1f),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = LightNavyTF,
+                        unfocusedContainerColor = LightNavyTF,
+                        disabledContainerColor = LightNavyTF,
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        disabledTextColor = Color.White,
+                    ),
+                    value = chatState.prompt,
+                    onValueChange = {
+                        chatViewModel.onEvent(ChatEvent.UpdatePrompt(it))
+                    },
+                    placeholder = {
+                        Text(
+                            text = "Type a prompt",
+                            color = Color.White,
+                            fontStyle = FontStyle.Italic
                         )
                     }
+                )
 
-                }
+                Spacer(modifier = Modifier.width(8.dp))
 
-                Row(
+                Icon(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp, start = 10.dp, end = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-
-                    Icon(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .clickable {
-                                imagePicker.launch(
-                                    PickVisualMediaRequest
-                                        .Builder()
-                                        .setMediaType(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                        .build()
-                                )
-                            },
-                        imageVector = Icons.Rounded.AddPhotoAlternate,
-                        contentDescription = "Add Photo",
-                        tint = LightNavy
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    TextField(
-                        modifier = Modifier.weight(1f).background(LightNavy),
-                        shape = RoundedCornerShape(18.dp),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = LightNavy,
-                            unfocusedContainerColor = LightNavy,
-                            disabledContainerColor = LightNavy,
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White,
-                            disabledTextColor = Color.White,
-                        ),
-                        value = chatState.prompt,
-                        onValueChange = {
-                            chatViewModel.onEvent(ChatEvent.UpdatePrompt(it))
+                        .size(30.dp)
+                        .clickable {
+                            chatViewModel.onEvent(ChatEvent.SendPrompt(chatState.prompt, bitmap))
+                            uriState.update { "" }
                         },
-                        placeholder = {
-                            Text(text = "Type a prompt", color = Color.White, fontStyle = FontStyle.Italic)
-                        }
-                    )
+                    imageVector = Icons.AutoMirrored.Rounded.Send,
+                    contentDescription = "Send prompt",
+                    tint = LightNavy
+                )
 
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    Icon(
-                        modifier = Modifier
-                            .size(30.dp)
-                            .clickable {
-                                chatViewModel.onEvent(ChatEvent.SendPrompt(chatState.prompt, bitmap))
-                                uriState.update { "" }
-                            },
-                        imageVector = Icons.AutoMirrored.Rounded.Send,
-                        contentDescription = "Send prompt",
-                        tint = LightNavy
-                    )
-
-                }
+            }
 
         }
 
@@ -315,26 +347,30 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            Box(modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .shadow(elevation = 10.dp, RoundedCornerShape(8.dp))
-                .background(NormalMaritineBlue)
-                .padding(10.dp),
-                contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .shadow(elevation = 10.dp, RoundedCornerShape(8.dp))
+                    .background(NormalMaritineBlue)
+                    .padding(10.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 Column(modifier = Modifier.fillMaxSize()) {
-                    Text(modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(6.dp),
+                    Text(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(6.dp),
                         text = prompt,
                         fontSize = 17.sp,
                         color = Color.White
                     )
 
                     time?.let {
-                        Text(modifier = Modifier
-                            .height(18.dp)
-                            .wrapContentWidth()
-                            .align(Alignment.End),
+                        Text(
+                            modifier = Modifier
+                                .height(18.dp)
+                                .wrapContentWidth()
+                                .align(Alignment.End),
                             text = it,
                             fontSize = 8.sp,
                             color = Color.Gray
@@ -350,7 +386,8 @@ class MainActivity : ComponentActivity() {
         val mContext = LocalContext.current
         val clipboardManager = LocalClipboardManager.current
         Column(
-            modifier = Modifier.padding(end = 100.dp, bottom = 16.dp)) {
+            modifier = Modifier.padding(end = 100.dp, bottom = 16.dp)
+        ) {
 
             Icon(
                 modifier = Modifier
@@ -366,26 +403,37 @@ class MainActivity : ComponentActivity() {
                             textToSpeech(mContext)
                         }
                     },
-                imageVector = if (_state.value.isButtonEnabled) { Icons.AutoMirrored.Rounded.VolumeDown } else { Icons.AutoMirrored.Rounded.VolumeUp },
+                imageVector = if (_state.value.isButtonEnabled) {
+                    Icons.AutoMirrored.Rounded.VolumeDown
+                } else {
+                    Icons.AutoMirrored.Rounded.VolumeUp
+                },
                 contentDescription = "Speak Text",
-                tint =  if (_state.value.isButtonEnabled) { Color.White } else { MaritineBlue }
+                tint = if (_state.value.isButtonEnabled) {
+                    Color.White
+                } else {
+                    MaritineBlue
+                }
             )
 
             Row(modifier = Modifier.align(Alignment.Start)) {
 
-                Box(modifier = Modifier
-                    .clip(RoundedCornerShape(12.dp))
-                    .shadow(elevation = 10.dp, RoundedCornerShape(8.dp))
-                    .background(MaritineBlue)
-                    .padding(10.dp),
-                    contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .shadow(elevation = 10.dp, RoundedCornerShape(8.dp))
+                        .background(MaritineBlue)
+                        .padding(10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
 
                     Column(modifier = Modifier.fillMaxSize()) {
 
                         Row(modifier = Modifier.align(Alignment.Start)) {
-                            Text(modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(6.dp),
+                            Text(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(6.dp),
                                 text = response,
                                 fontSize = 17.sp,
                                 color = Color.White
@@ -425,15 +473,16 @@ class MainActivity : ComponentActivity() {
 
                             )
                             Spacer(modifier = Modifier.width(2.dp))
-                            Text(modifier = Modifier
-                                .height(18.dp)
-                                .wrapContentWidth()
-                                .clickable {
-                                    clipboardManager.setText(AnnotatedString(response))
-                                    Toast
-                                        .makeText(mContext, "Text copied", Toast.LENGTH_LONG)
-                                        .show()
-                                },
+                            Text(
+                                modifier = Modifier
+                                    .height(18.dp)
+                                    .wrapContentWidth()
+                                    .clickable {
+                                        clipboardManager.setText(AnnotatedString(response))
+                                        Toast
+                                            .makeText(mContext, "Text copied", Toast.LENGTH_LONG)
+                                            .show()
+                                    },
                                 text = "Copy",
                                 fontSize = 10.sp,
                                 color = Color.Gray
@@ -442,9 +491,10 @@ class MainActivity : ComponentActivity() {
                             Spacer(modifier = Modifier.width(12.dp))
 
                             time?.let {
-                                Text(modifier = Modifier
-                                    .height(18.dp)
-                                    .wrapContentWidth(),
+                                Text(
+                                    modifier = Modifier
+                                        .height(18.dp)
+                                        .wrapContentWidth(),
                                     text = it,
                                     fontSize = 8.sp,
                                     color = Color.Gray
@@ -483,7 +533,8 @@ class MainActivity : ComponentActivity() {
         val showDropDownMenu = remember { mutableStateOf(false) }
         rememberSystemUiController().setSystemBarsColor(color = DarkESTMaritineBlue)
 
-        TopAppBar({ Text(text = "") },
+        TopAppBar(
+            { Text(text = "") },
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Purple40)
@@ -494,8 +545,9 @@ class MainActivity : ComponentActivity() {
 
                 }
                 DropdownMenu(showDropDownMenu.value, { showDropDownMenu.value = false }) {
-                    DropdownMenuItem( text = { Text(text = "Clear Chat") }, leadingIcon = {
-                        Icon(Icons.Filled.DeleteForever, null, tint = LightNavy) }, onClick = {
+                    DropdownMenuItem(text = { Text(text = "Clear Chat") }, leadingIcon = {
+                        Icon(Icons.Filled.DeleteForever, null, tint = LightNavy)
+                    }, onClick = {
                         showDropDownMenu.value = false
                         chatViewModel.clear()
                     })
@@ -511,18 +563,20 @@ class MainActivity : ComponentActivity() {
         val prefChatList = PreferencesManager(LocalContext.current).getChatStateFlow()
     }
 
-    private fun textToSpeech(context: Context){
+    private fun textToSpeech(context: Context) {
         textToSpeech = TextToSpeech(context) {
             if (it == TextToSpeech.SUCCESS) {
                 textToSpeech?.let { txtToSpeech ->
                     txtToSpeech.language = Locale.getDefault()
                     txtToSpeech.setSpeechRate(1.0f)
-                    txtToSpeech.speak(_state.value.text,
+                    txtToSpeech.speak(
+                        _state.value.text,
                         TextToSpeech.QUEUE_ADD,
                         null,
                         99.toString()
                     )
-                    txtToSpeech.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    txtToSpeech.setOnUtteranceProgressListener(object :
+                        UtteranceProgressListener() {
                         override fun onStart(utteranceId: String?) {
                             if (TextUtils.equals(utteranceId, "99")) {
                                 _state.value = state.value.copy(
